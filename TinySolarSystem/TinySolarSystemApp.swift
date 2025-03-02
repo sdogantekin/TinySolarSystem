@@ -9,9 +9,19 @@ import SwiftUI
 
 @main
 struct TinySolarSystemApp: App {
+    @StateObject private var networkMonitor = NetworkMonitor()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if networkMonitor.isConnected {
+                SplashScreen()
+            } else {
+                ErrorScreen(errorType: .offline) {
+                    // This is a dummy action since we can't force network reconnection
+                    // The NetworkMonitor will automatically update when connection is restored
+                }
+            }
         }
+        .environmentObject(networkMonitor)
     }
 }
