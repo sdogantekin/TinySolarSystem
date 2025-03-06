@@ -17,6 +17,7 @@ struct CelestialBody: Identifiable {
     var ringColor: Color = .white // Color of the rings if present
     var funFact: String = "" // Fun fact about the celestial body
     var moonCount: Int = 0 // Number of moons (for planets)
+    var moons:[CelestialBody] = []
     
     // For moons
     var parentBodyID: UUID? = nil
@@ -168,8 +169,8 @@ struct CelestialBody: Identifiable {
         case .moon:
             // Moons need to be visible but proportionally correct
             // Increase visibility at higher zoom levels
-            let zoomFactor = zoomLevel > 5 ? sqrt(zoomLevel) * 1.5 : sqrt(zoomLevel)
-            baseSize = log(diameter) * 0.4 * zoomFactor * 1.2
+            let zoomFactor = zoomLevel > 3 ? sqrt(zoomLevel) * 2.0 : sqrt(zoomLevel) * 1.5
+            baseSize = log(diameter) * 0.4 * zoomFactor * 1.5
         default:
             baseSize = log(diameter) * 0.4 * sqrt(zoomLevel)
         }

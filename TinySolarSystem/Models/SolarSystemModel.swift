@@ -4,9 +4,10 @@ import Combine
 class SolarSystemModel: ObservableObject {
     @Published var celestialBodies: [CelestialBody]
     @Published var currentTime: Double = 0 // Current simulation time in days
-    @Published var speedFactor: Double = 0.025 // Reduced to half of previous value (0.05)
+    @Published var speedFactor: Double = 0.01 // Reduced initial speed (was 0.025)
     @Published var zoomLevel: Double = 3.0 // Default zoom level for good initial visibility
     @Published var isSimulationPaused: Bool = false
+    @Published var currentDate: Date = Date() // Current date in the simulation
     
     // Zoom limits
     let minZoomLevel: Double = 0.1
@@ -14,13 +15,13 @@ class SolarSystemModel: ObservableObject {
     
     // Speed limits
     let minSpeedFactor: Double = 0.0
-    let maxSpeedFactor: Double = 1.0
+    let maxSpeedFactor: Double = 0.2 // Reduced to 20% of previous value (was 1.0)
     
     private var timer: AnyCancellable?
     private let baseTimeStep: Double = 1.0 / 60.0 // Base time step in days (1/60 of a day per frame)
     
     // Maximum speed in seconds per simulation day
-    private let maxSpeed: Double = 12960.0 // Reduced to 1/5 of previous value (64800.0)
+    private let maxSpeed: Double = 2592.0 // Reduced to 20% of previous value (was 12960.0)
     
     // Calculate the current time scale based on the speed factor
     var currentTimeScale: Double {
@@ -69,12 +70,26 @@ class SolarSystemModel: ObservableObject {
                 // Update time based on speed factor
                 let timeStep = self.baseTimeStep * self.currentTimeScale
                 self.currentTime += timeStep
+                
+                // Update current date based on time step
+                self.currentDate = self.currentDate.addingTimeInterval(timeStep * 24 * 60 * 60)
             }
     }
     
     func resetSimulation() {
         currentTime = 0
+        currentDate = Date() // Reset to current date
         celestialBodies = SolarSystemModel.createSolarSystem()
+    }
+    
+    func setDate(_ date: Date) {
+        // Calculate the time difference in days between the new date and the current date
+        let timeInterval = date.timeIntervalSince(currentDate)
+        let daysDifference = timeInterval / (24 * 60 * 60)
+        
+        // Update the current time and date
+        currentTime += daysDifference
+        currentDate = date
     }
     
     func togglePause() {
@@ -235,8 +250,8 @@ class SolarSystemModel: ObservableObject {
             funFact: "Venus rotates backwards compared to other planets and has a surface hot enough to melt lead (462°C).",
             moonCount: 0
         )
-        
-        let earth = CelestialBody(
+                
+        var earth = CelestialBody(
             name: "Earth",
             type: .planet,
             diameter: 12756,
@@ -251,9 +266,7 @@ class SolarSystemModel: ObservableObject {
             funFact: "Earth is the only planet known to support life and has the highest density of any planet in our solar system.",
             moonCount: 1
         )
-        
-        // Create Moon with Earth as parent
-        let moon = CelestialBody(
+        earth.moons.append(CelestialBody(
             name: "Moon",
             type: .moon,
             diameter: 3475,
@@ -268,7 +281,7 @@ class SolarSystemModel: ObservableObject {
             parentBodyID: earth.id,
             distanceFromParent: 0.03, // Increased from 0.025 for better visibility
             funFact: "The Moon is moving away from Earth at a rate of 3.8 cm per year and always shows the same face to Earth."
-        )
+        ))
         
         let mars = CelestialBody(
             name: "Mars",
@@ -374,7 +387,7 @@ class SolarSystemModel: ObservableObject {
             moonCount: 5
         )
         
-        return [sun, mercury, venus, earth, moon, mars, jupiter, saturn, uranus, neptune, pluto]
+        return [sun, mercury, venus, earth, mars, jupiter, saturn, uranus, neptune, pluto]
     }
     
     // Helper method to find a parent body's position

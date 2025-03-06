@@ -11,9 +11,19 @@ struct MainView: View {
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
     @State private var is3DView: Bool = false // Default to 2D view
+    @State private var showDatePicker = false
+    @State private var selectedDate = Date()
     
     // Define our delightful yellow color
     private let accentColor = Color(red: 1.0, green: 0.85, blue: 0.4) // Delightful inspiring yellow
+    
+    // Date formatter for displaying the current date
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
     
     var body: some View {
         ZStack {
@@ -59,6 +69,12 @@ struct MainView: View {
                         .font(.system(size: 28, weight: .bold))
                         .foregroundColor(accentColor)
                         .padding(.top, 10)
+                    
+                    // Current date display
+                    Text(dateFormatter.string(from: model.currentDate))
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(accentColor.opacity(0.8))
+                        .padding(.top, 5)
                     
                     HStack {
                         // 2D/3D view switch
@@ -149,9 +165,6 @@ struct MainView: View {
                 // Speed slider (appears when speed button is selected)
                 if showSpeedSlider {
                     VStack(spacing: 15) {
-                        // Remove the speed label text
-                        
-                        // Simplified speed slider with just the slider and done button
                         Slider(
                             value: $model.speedFactor,
                             in: model.minSpeedFactor...model.maxSpeedFactor
@@ -185,18 +198,73 @@ struct MainView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 
+                // Date picker sheet
+                if showDatePicker {
+                    VStack(spacing: 15) {
+                        DatePicker(
+                            "Select Date",
+                            selection: $selectedDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.graphical)
+                        .accentColor(accentColor)
+                        .padding()
+                        
+                        HStack(spacing: 20) {
+                            Button("Cancel") {
+                                withAnimation {
+                                    showDatePicker = false
+                                }
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 20)
+                            .background(Color.black.opacity(0.5))
+                            .foregroundColor(accentColor)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(accentColor, lineWidth: 1)
+                            )
+                            
+                            Button("Set Date") {
+                                model.setDate(selectedDate)
+                                withAnimation {
+                                    showDatePicker = false
+                                }
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 20)
+                            .background(accentColor)
+                            .foregroundColor(.black)
+                            .cornerRadius(8)
+                        }
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(accentColor, lineWidth: 1)
+                    )
+                    .padding()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                
                 // Bottom controls
-                HStack(spacing: 30) {
+                HStack(spacing: 20) {
                     // Reset button
                     Button(action: {
                         model.resetChanges()
                         model.resetSimulation()
+                        selectedDate = Date() // Reset to current date
                         // Reset drag offset and zoom
                         dragOffset = .zero
                         lastDragValue = .zero
                     }) {
-                        Label("Reset", systemImage: "arrow.counterclockwise")
-                            .padding(10)
+                        Text("Reset")
+                            .font(.system(size: 14, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
                             .background(Color.black.opacity(0.5))
                             .foregroundColor(accentColor)
                             .cornerRadius(8)
@@ -212,8 +280,29 @@ struct MainView: View {
                             showSpeedSlider.toggle()
                         }
                     }) {
-                        Label("Speed", systemImage: "speedometer")
-                            .padding(10)
+                        Text("Speed")
+                            .font(.system(size: 14, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.5))
+                            .foregroundColor(accentColor)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(accentColor, lineWidth: 1)
+                            )
+                    }
+                    
+                    // Date button
+                    Button(action: {
+                        withAnimation {
+                            showDatePicker.toggle()
+                        }
+                    }) {
+                        Text("Date")
+                            .font(.system(size: 14, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
                             .background(Color.black.opacity(0.5))
                             .foregroundColor(accentColor)
                             .cornerRadius(8)
@@ -227,8 +316,10 @@ struct MainView: View {
                     Button(action: {
                         showWhatIfScreen.toggle()
                     }) {
-                        Label("What If", systemImage: "wand.and.stars")
-                            .padding(10)
+                        Text("What If")
+                            .font(.system(size: 14, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
                             .background(Color.black.opacity(0.5))
                             .foregroundColor(accentColor)
                             .cornerRadius(8)
@@ -238,7 +329,7 @@ struct MainView: View {
                             )
                     }
                 }
-                .padding()
+                .padding(.horizontal)
                 .frame(maxWidth: .infinity)
                 .background(Color.black.opacity(0.7))
             }
@@ -262,6 +353,10 @@ struct MainView: View {
                     self.selectedBody = body
                 }
             }
+            
+            // Initialize with current date
+            selectedDate = Date()
+            model.setDate(selectedDate)
         }
     }
     
@@ -339,36 +434,14 @@ struct SolarSystemView: View {
                         Group {
                             // Draw orbit paths
                             if body.type != .star {
-                                if body.type == .moon, let parentID = body.parentBodyID {
-                                    if let parentBody = model.celestialBodies.first(where: { $0.id == parentID }),
-                                       !parentBody.isRemoved {
-                                        // Only show moon orbit when zoomed in enough (zoom level > 5)
-                                        if model.zoomLevel > 5 {
-                                            let parentPos = parentBody.position(at: model.currentTime, scale: model.zoomLevel)
-                                            MoonOrbitPath(
-                                                parentPosition: CGPoint(
-                                                    x: geometry.size.width / 2 + parentPos.x,
-                                                    y: geometry.size.height / 2 + parentPos.y
-                                                ),
-                                                distanceFromParent: body.distanceFromParent ?? 0,
-                                                eccentricity: body.eccentricity,
-                                                scale: model.zoomLevel
-                                            )
-                                            .stroke(accentColor.opacity(0.7), 
-                                                    lineWidth: 1.5)
-                                            .zIndex(5) // Ensure moon orbit is drawn above other elements
-                                        }
-                                    }
-                                } else {
-                                    EllipticalOrbitPath(
-                                        semiMajorAxis: body.distanceFromSun,
-                                        eccentricity: body.eccentricity,
-                                        scale: model.zoomLevel,
-                                        bodyType: body.type
-                                    )
-                                    .stroke(accentColor.opacity(min(0.6, 0.3 + model.zoomLevel * 0.03)), 
-                                            lineWidth: min(1.5, 0.8 + model.zoomLevel * 0.07))
-                                }
+                                EllipticalOrbitPath(
+                                    semiMajorAxis: body.distanceFromSun,
+                                    eccentricity: body.eccentricity,
+                                    scale: model.zoomLevel,
+                                    bodyType: body.type
+                                )
+                                .stroke(accentColor.opacity(min(0.6, 0.3 + model.zoomLevel * 0.03)),
+                                        lineWidth: min(1.5, 0.8 + model.zoomLevel * 0.07))
                             }
                             
                             // Draw celestial body
@@ -387,6 +460,14 @@ struct SolarSystemView: View {
                     perspective: 1
                 )
             }
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in
+                        // Apply zoom with limits
+                        let newZoom = model.zoomLevel * Double(value)
+                        model.zoomLevel = min(max(newZoom, model.minZoomLevel), model.maxZoomLevel)
+                    }
+            )
         }
     }
 }
@@ -396,6 +477,8 @@ struct CelestialBodyView: View {
     let model: SolarSystemModel
     let geometry: GeometryProxy
     let is3DView: Bool
+    
+    private let accentColor = Color(red: 1.0, green: 0.85, blue: 0.4)
     
     var body: some View {
         let position = calculatePosition()
@@ -446,6 +529,60 @@ struct CelestialBodyView: View {
                            is3DView: is3DView,
                            ringScale: celestialBody.name == "Saturn" ? 2.5 : 1.8)
             }
+            
+            // Draw moons if this is a planet
+            if celestialBody.type == .planet && !celestialBody.moons.isEmpty {
+                ForEach(celestialBody.moons, id: \.id) { moon in
+                    // Calculate moon's position relative to its parent planet
+                    let moonAngle = (model.currentTime / moon.orbitalPeriod) * 2 * Double.pi
+                    let moonDistance = moon.distanceFromParent ?? 0
+                    
+                    // Calculate moon's size to be smaller than the parent planet
+                    let moonSize = min(size * 0.3, moon.displaySize(zoomLevel: model.zoomLevel))
+                    
+                    // Calculate moon's orbit radius based on the sum of Earth's and Moon's body radii
+                    let moonOrbitRadius = 0.5 * (size + moonSize) // 0.5 times the sum of both bodies' radii
+                    
+                    // Calculate moon's position on its orbit
+                    let moonX = moonOrbitRadius * Foundation.cos(moonAngle)
+                    let moonY = moonOrbitRadius * Foundation.sin(moonAngle)
+                    
+                    // Draw moon orbit when zoomed in enough
+                    if model.zoomLevel > 3 {
+                        Circle()
+                            .stroke(accentColor.opacity(0.7), lineWidth: 1.5)
+                            .frame(width: moonOrbitRadius * 2, height: moonOrbitRadius * 2)
+                    }
+                    
+                    // Draw the moon with label and tap gesture
+                    ZStack {
+                        Circle()
+                            .fill(moon.color)
+                            .frame(width: moonSize, height: moonSize)
+                        
+                        // Show moon label when zoomed in enough
+                        if model.zoomLevel > 3 {
+                            Text(moon.name)
+                                .font(.system(size: min(12, 6 + sqrt(model.zoomLevel) * 2)))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(4)
+                                .offset(x: moonX, y: moonY - moonSize - 8)
+                                .opacity(min(1.0, model.zoomLevel * 0.5))
+                        }
+                    }
+                    .offset(x: moonX, y: moonY)
+                    .onTapGesture {
+                        NotificationCenter.default.post(
+                            name: Notification.Name("SelectCelestialBody"),
+                            object: moon
+                        )
+                    }
+                }
+                .zIndex(10) // Ensure moons and their orbits are above the planet
+            }
         }
         .position(x: geometry.size.width / 2 + position.x,
                  y: geometry.size.height / 2 + position.y)
@@ -473,18 +610,6 @@ struct CelestialBodyView: View {
     }
     
     private func calculatePosition() -> CGPoint {
-        if celestialBody.type == .moon {
-            // For moons, find the parent body's position (Earth for the Moon)
-            // and calculate the moon's position relative to it
-            if let parentPosition = model.findParentPosition(for: celestialBody, at: model.currentTime, scale: model.zoomLevel) {
-                // Use the parent's actual position for the moon's orbit center
-                // This ensures the moon orbits around Earth, not a scaled position
-                return celestialBody.position(at: model.currentTime, scale: model.zoomLevel, parentPosition: parentPosition)
-            }
-            // Fallback to standard position if parent not found
-            return celestialBody.position(at: model.currentTime, scale: model.zoomLevel)
-        }
-        
         let basePosition = celestialBody.position(at: model.currentTime, scale: model.zoomLevel)
         
         // Apply the same scaling as the orbit paths for consistency
@@ -563,46 +688,6 @@ struct PlanetRings: View {
                 axis: (x: 1, y: 0, z: 0)
             )
         }
-    }
-}
-
-struct MoonOrbitPath: Shape {
-    let parentPosition: CGPoint
-    let distanceFromParent: Double
-    let eccentricity: Double
-    let scale: Double
-    
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        
-        // Skip if it's a very small orbit or if zoom level is too low
-        if distanceFromParent <= 0.0001 {
-            return path
-        }
-        
-        let steps = 100
-        // Update moonScale to match the value used in CelestialBody.position
-        let moonScale = scale * 50 // Match the scaling factor used in CelestialBody.position
-        
-        // Use simplified circular orbits for moons with Earth as the center
-        let radius = distanceFromParent * moonScale
-        
-        // Draw a complete orbit path instead of dashed for better visibility
-        for i in 0...steps {
-            let angle = Double(i) * 2 * Double.pi / Double(steps)
-            let x = radius * Foundation.cos(angle)
-            let y = radius * Foundation.sin(angle)
-            
-            if i == 0 {
-                path.move(to: CGPoint(x: parentPosition.x + x, y: parentPosition.y + y))
-            } else {
-                path.addLine(to: CGPoint(x: parentPosition.x + x, y: parentPosition.y + y))
-            }
-        }
-        
-        // Close the path to complete the circle
-        path.closeSubpath()
-        return path
     }
 }
 
