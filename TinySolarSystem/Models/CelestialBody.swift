@@ -197,8 +197,22 @@ struct CelestialBody: Identifiable {
     func isInHabitableZone() -> Bool {
         guard let temp = temperature, type == .planet || type == .dwarfPlanet else { return false }
         
-        // Simple habitable zone check: between -50°C and 50°C
+        // Convert to Celsius
         let celsius = temp - 273.15
-        return celsius > -50 && celsius < 50
+        
+        // Special case for Venus - despite temperature in habitable range, it's not habitable
+        if name == "Venus" {
+            return false // Venus is too hot and has toxic atmosphere
+        }
+        
+        // Earth-like conditions for habitability:
+        // 1. Temperature between -15°C and 30°C (liquid water possible)
+        // 2. Must be a rocky planet (not a gas giant)
+        // 3. Must have reasonable mass for holding atmosphere
+        let isTemperatureOk = celsius >= -15 && celsius <= 30
+        let isRockyPlanet = diameter < 50000 // Excludes gas giants
+        let hasSufficientMass = mass >= 1e23 // Minimum mass to hold atmosphere
+        
+        return isTemperatureOk && isRockyPlanet && hasSufficientMass
     }
 } 

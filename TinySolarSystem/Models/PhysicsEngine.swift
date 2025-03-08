@@ -131,12 +131,23 @@ class PhysicsEngine {
     }
     
     // Calculate temperature of a planet based on distance from Sun
-    // T = 278 * (1-A)^0.25 / sqrt(d)
-    // Where:
-    // T = temperature in Kelvin
-    // A = albedo (reflectivity, 0-1)
-    // d = distance from Sun in AU
+    // This is a more accurate model that includes greenhouse effects
     static func calculatePlanetTemperature(distanceFromSun: Double, albedo: Double = 0.3) -> Double {
-        return 278.0 * pow(1.0 - albedo, 0.25) / sqrt(distanceFromSun)
+        // Base temperature calculation using the inverse square law
+        var baseTemp = 278.0 * pow(1.0 - albedo, 0.25) / sqrt(distanceFromSun)
+        
+        // Apply greenhouse effect adjustments for specific planets
+        if distanceFromSun >= 0.71 && distanceFromSun <= 0.73 { // Venus
+            // Venus has an extreme greenhouse effect, raising surface temperature to about 737K
+            baseTemp = 737.0
+        } else if distanceFromSun >= 0.99 && distanceFromSun <= 1.01 { // Earth
+            // Earth's greenhouse effect raises temperature by about 33K
+            baseTemp += 33.0
+        } else if distanceFromSun >= 1.51 && distanceFromSun <= 1.53 { // Mars
+            // Mars has a weak greenhouse effect, only a few degrees
+            baseTemp += 5.0
+        }
+        
+        return baseTemp
     }
 } 

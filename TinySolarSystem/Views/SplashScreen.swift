@@ -29,7 +29,7 @@ struct SplashScreen: View {
                         .fontWeight(.bold)
                         .foregroundColor(accentColor)
                     
-                    Text("Explore the wonders of our solar system!")
+                    Text("Explore the wonders of our tiny solar system!")
                         .font(.headline)
                         .foregroundColor(accentColor.opacity(0.8))
                         .padding(.top, 2)

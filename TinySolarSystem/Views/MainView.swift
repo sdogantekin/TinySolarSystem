@@ -27,38 +27,40 @@ struct MainView: View {
     
     var body: some View {
         ZStack {
-            // Background
-            Color.black.edgesIgnoringSafeArea(.all)
+            // Background with gestures
+            Color.black
+                .edgesIgnoringSafeArea(.all)
+                .gesture(
+                    SimultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                self.dragOffset = CGSize(
+                                    width: self.lastDragValue.width + value.translation.width,
+                                    height: self.lastDragValue.height + value.translation.height
+                                )
+                            }
+                            .onEnded { value in
+                                self.lastDragValue = self.dragOffset
+                            },
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let delta = value / self.lastScale
+                                self.lastScale = value
+                                
+                                // Apply zoom with limits and smoother scaling
+                                let newZoom = model.zoomLevel * Double(delta)
+                                model.zoomLevel = min(max(newZoom, model.minZoomLevel), model.maxZoomLevel)
+                            }
+                            .onEnded { _ in
+                                self.lastScale = 1.0
+                            }
+                    )
+                )
+            
             StarsBackground()
             
-            // Solar System View
+            // Solar System View without gestures
             SolarSystemView(model: model, dragOffset: $dragOffset, scale: scale, is3DView: is3DView)
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            self.dragOffset = CGSize(
-                                width: self.lastDragValue.width + value.translation.width,
-                                height: self.lastDragValue.height + value.translation.height
-                            )
-                        }
-                        .onEnded { value in
-                            self.lastDragValue = self.dragOffset
-                        }
-                )
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            let delta = value / self.lastScale
-                            self.lastScale = value
-                            
-                            // Apply zoom with limits
-                            let newZoom = model.zoomLevel * Double(delta)
-                            model.zoomLevel = min(max(newZoom, model.minZoomLevel), model.maxZoomLevel)
-                        }
-                        .onEnded { value in
-                            self.lastScale = 1.0
-                        }
-                )
             
             // Controls overlay
             VStack {
@@ -256,6 +258,7 @@ struct MainView: View {
                     Button(action: {
                         model.resetChanges()
                         model.resetSimulation()
+                        model.speedFactor = 0.01 // Reset speed to default value
                         selectedDate = Date() // Reset to current date
                         // Reset drag offset and zoom
                         dragOffset = .zero
@@ -460,14 +463,6 @@ struct SolarSystemView: View {
                     perspective: 1
                 )
             }
-            .gesture(
-                MagnificationGesture()
-                    .onChanged { value in
-                        // Apply zoom with limits
-                        let newZoom = model.zoomLevel * Double(value)
-                        model.zoomLevel = min(max(newZoom, model.minZoomLevel), model.maxZoomLevel)
-                    }
-            )
         }
     }
 }
@@ -511,37 +506,73 @@ struct CelestialBodyView: View {
             }
             
             // The celestial body
-            Circle()
-                .fill(celestialBody.color)
-                .frame(width: size, height: size)
-                .if(is3DView && celestialBody.type != .star) { view in
-                    view.shadow(color: .black.opacity(0.7), radius: size * 0.2, x: size * 0.1, y: size * 0.1)
+            Group {
+                if celestialBody.type == .star {
+                    Circle()
+                        .fill(celestialBody.color)
+                        .frame(width: size, height: size)
+                } else {
+                    // Use texture for planets and moons with lighting effect
+                    ZStack {
+                        Image(celestialBody.texture)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: size, height: size)
+                        
+                        // Add a radial gradient for day/night effect
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.black.opacity(0),
+                                        Color.black.opacity(0.7)
+                                    ]),
+                                    center: .leading,
+                                    startRadius: size * 0.1,
+                                    endRadius: size * 0.8
+                                )
+                            )
+                            .frame(width: size, height: size)
+                    }
+                    .clipShape(Circle())
+                    // Apply rotation based on the body's rotation period
+                    .rotationEffect(.degrees(celestialBody.rotationPeriod != 0 
+                        ? (360.0 * model.currentTime / abs(celestialBody.rotationPeriod)) * (celestialBody.rotationPeriod > 0 ? 1 : -1)
+                        : 0))
                 }
+            }
+            .if(is3DView && celestialBody.type != .star) { view in
+                view.shadow(color: .black.opacity(0.7), radius: size * 0.2, x: size * 0.1, y: size * 0.1)
+            }
             
             // Rings for gas giants (Jupiter, Saturn, Uranus, Neptune)
             if celestialBody.type == .planet && 
-               (celestialBody.name == "Jupiter" || 
-                celestialBody.name == "Saturn" || 
-                celestialBody.name == "Uranus" || 
-                celestialBody.name == "Neptune") {
+               (celestialBody.name == "Saturn" ||
+                celestialBody.name == "Uranus" ) {
                 PlanetRings(bodySize: size, 
                            ringColor: celestialBody.ringColor, 
                            is3DView: is3DView,
-                           ringScale: celestialBody.name == "Saturn" ? 2.5 : 1.8)
+                           ringScale: celestialBody.name == "Saturn" ? 2.5 : 1.8,
+                            ringCount: celestialBody.name == "Saturn" ? 2 : 1)
             }
             
             // Draw moons if this is a planet
             if celestialBody.type == .planet && !celestialBody.moons.isEmpty {
                 ForEach(celestialBody.moons, id: \.id) { moon in
                     // Calculate moon's position relative to its parent planet
-                    let moonAngle = (model.currentTime / moon.orbitalPeriod) * 2 * Double.pi
+                    let moonAngle = (model.currentTime / moon.orbitalPeriod) * 2 * Double.pi + moon.initialPhaseAngle
                     let moonDistance = moon.distanceFromParent ?? 0
                     
                     // Calculate moon's size to be smaller than the parent planet
                     let moonSize = min(size * 0.3, moon.displaySize(zoomLevel: model.zoomLevel))
                     
-                    // Calculate moon's orbit radius based on the sum of Earth's and Moon's body radii
-                    let moonOrbitRadius = 0.5 * (size + moonSize) // 0.5 times the sum of both bodies' radii
+                    // Calculate moon's orbit radius based on planet and moon radii
+                    let planetRadius = size / 2
+                    let moonRadius = moonSize / 2
+                    let baseOrbitRadius = planetRadius * 1.5 // Start at 2x planet radius
+                    let orbitSpacing = (planetRadius + moonRadius) * 0.6 // Each moon spaced by 0.8x combined radii
+                    let moonIndex = celestialBody.moons.firstIndex(where: { $0.id == moon.id }) ?? 0
+                    let moonOrbitRadius = baseOrbitRadius + (Double(moonIndex) * orbitSpacing)
                     
                     // Calculate moon's position on its orbit
                     let moonX = moonOrbitRadius * Foundation.cos(moonAngle)
@@ -556,9 +587,33 @@ struct CelestialBodyView: View {
                     
                     // Draw the moon with label and tap gesture
                     ZStack {
-                        Circle()
-                            .fill(moon.color)
-                            .frame(width: moonSize, height: moonSize)
+                        // Use texture for moons with lighting effect
+                        ZStack {
+                            Image(moon.texture)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: moonSize, height: moonSize)
+                            
+                            // Add a radial gradient for day/night effect
+                            Circle()
+                                .fill(
+                                    RadialGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.black.opacity(0),
+                                            Color.black.opacity(0.7)
+                                        ]),
+                                        center: .leading,
+                                        startRadius: moonSize * 0.1,
+                                        endRadius: moonSize * 0.8
+                                    )
+                                )
+                                .frame(width: moonSize, height: moonSize)
+                        }
+                        .clipShape(Circle())
+                        // Apply rotation based on the moon's rotation period
+                        .rotationEffect(.degrees(moon.rotationPeriod != 0 
+                            ? (360.0 * model.currentTime / abs(moon.rotationPeriod))
+                            : 0))
                         
                         // Show moon label when zoomed in enough
                         if model.zoomLevel > 3 {
@@ -569,7 +624,7 @@ struct CelestialBodyView: View {
                                 .padding(.vertical, 2)
                                 .background(Color.black.opacity(0.5))
                                 .cornerRadius(4)
-                                .offset(x: moonX, y: moonY - moonSize - 8)
+                                .offset(y: -moonSize - 8)
                                 .opacity(min(1.0, model.zoomLevel * 0.5))
                         }
                     }
@@ -663,6 +718,7 @@ struct PlanetRings: View {
     let ringColor: Color
     let is3DView: Bool
     let ringScale: CGFloat // New parameter for ring size
+    let ringCount: Int
     
     var body: some View {
         ZStack {
@@ -670,16 +726,17 @@ struct PlanetRings: View {
             Ellipse()
                 .stroke(ringColor.opacity(0.7), lineWidth: 1.5)
                 .frame(width: bodySize * ringScale, height: bodySize * (is3DView ? 0.6 : 0.8))
-            
-            // Inner ring
-            Ellipse()
-                .stroke(ringColor.opacity(0.5), lineWidth: 1.5)
-                .frame(width: bodySize * (ringScale - 0.3), height: bodySize * (is3DView ? 0.5 : 0.7))
-            
-            // Inner ring shadow
-            Ellipse()
-                .fill(ringColor.opacity(0.2))
-                .frame(width: bodySize * (ringScale - 0.2), height: bodySize * (is3DView ? 0.55 : 0.75))
+            if (ringCount > 1) {
+                // Inner ring
+                Ellipse()
+                    .stroke(ringColor.opacity(0.5), lineWidth: 1.5)
+                    .frame(width: bodySize * (ringScale - 0.3), height: bodySize * (is3DView ? 0.5 : 0.7))
+                
+                // Inner ring shadow
+                Ellipse()
+                    .fill(ringColor.opacity(0.2))
+                    .frame(width: bodySize * (ringScale - 0.2), height: bodySize * (is3DView ? 0.55 : 0.75))
+            }
         }
         .rotationEffect(.degrees(15)) // Tilt the rings
         .if(is3DView) { view in
@@ -755,16 +812,32 @@ struct CelestialBodyInfoView: View {
     private let accentColor = Color(red: 1.0, green: 0.85, blue: 0.4)
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             // Header with celestial body name and close button
             HStack {
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(celestialBody.color)
-                        .frame(width: 24, height: 24)
+                    // Replace solid color circle with texture image and rings if applicable
+                    ZStack {
+                        Image(celestialBody.texture)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 32, height: 32)
+                            .clipShape(Circle())
+                        
+                        // Add rings for Saturn and Uranus
+                        if celestialBody.type == .planet && celestialBody.hasRings {
+                            PlanetRings(
+                                bodySize: 32,
+                                ringColor: celestialBody.ringColor,
+                                is3DView: false,
+                                ringScale: celestialBody.name == "Saturn" ? 2.5 : 1.8,
+                                ringCount: celestialBody.name == "Saturn" ? 2 : 1
+                            )
+                        }
+                    }
                     
                     Text(celestialBody.name)
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.system(size: 24, weight: .bold))
                         .foregroundColor(accentColor)
                 }
                 
@@ -780,24 +853,24 @@ struct CelestialBodyInfoView: View {
             }
             .padding(.bottom, 4)
             
-            // Type indicator
+            // Type indicator with smaller text
             Text(celestialBody.type.rawValue.capitalized)
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(accentColor.opacity(0.9))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
                 .background(accentColor.opacity(0.15))
-                .cornerRadius(8)
+                .cornerRadius(6)
             
             Divider()
                 .background(accentColor.opacity(0.3))
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
             
-            // Main info grid with improved spacing and organization
+            // Main info grid with reduced spacing and text sizes
             LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 20),
-                GridItem(.flexible(), spacing: 20)
-            ], spacing: 16) {
+                GridItem(.flexible(), spacing: 16),
+                GridItem(.flexible(), spacing: 16)
+            ], spacing: 12) {
                 InfoCell(title: "Diameter", value: "\(formatNumber(celestialBody.diameter))", unit: "km")
                 InfoCell(title: "Mass", value: "\(formatScientific(celestialBody.mass))", unit: "kg")
                 
@@ -818,99 +891,96 @@ struct CelestialBodyInfoView: View {
                     InfoCell(title: "Moons", value: "\(celestialBody.moonCount)", unit: "")
                 }
                 
-                // Display temperature for non-star bodies
                 if celestialBody.type != .star, let temp = celestialBody.temperature {
                     InfoCell(title: "Temperature", value: celestialBody.formattedTemperature(), unit: "")
                 }
             }
             
-            // Habitable zone indicator for planets and dwarf planets
+            // Habitable zone indicator with smaller text
             if celestialBody.isInHabitableZone() {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Label("Potentially Habitable!", systemImage: "leaf.fill")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.green)
                     
                     Text("This celestial body has a temperature that could potentially support liquid water, a key ingredient for life as we know it.")
                         .foregroundColor(.white.opacity(0.9))
-                        .font(.system(size: 16))
+                        .font(.system(size: 13))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding()
+                .padding(10)
                 .background(Color.green.opacity(0.1))
-                .cornerRadius(12)
+                .cornerRadius(10)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 10)
                         .stroke(Color.green.opacity(0.3), lineWidth: 1)
                 )
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
             }
             
-            // Physics information section
+            // Physics information section with smaller text
             if celestialBody.type == .planet || celestialBody.type == .dwarfPlanet {
                 Divider()
                     .background(accentColor.opacity(0.3))
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Label("Physics Data", systemImage: "atom")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(accentColor)
                     
-                    // Calculate escape velocity
                     let escapeVelocity = PhysicsEngine.calculateEscapeVelocity(
                         mass: celestialBody.mass,
-                        distance: celestialBody.diameter / 2 * 1000 // Convert to meters
+                        distance: celestialBody.diameter / 2 * 1000
                     )
                     
-                    // Calculate orbital velocity
                     let orbitalVelocity = PhysicsEngine.calculateOrbitalVelocity(
                         distanceFromSun: celestialBody.distanceFromSun
                     )
                     
                     Text("Escape Velocity: \(formatNumber(escapeVelocity / 1000)) km/s")
                         .foregroundColor(.white.opacity(0.9))
-                        .font(.system(size: 16))
+                        .font(.system(size: 13))
                     
                     Text("Orbital Velocity: \(formatNumber(orbitalVelocity / 1000)) km/s")
                         .foregroundColor(.white.opacity(0.9))
-                        .font(.system(size: 16))
+                        .font(.system(size: 13))
                     
                     if celestialBody.distanceFromSun != celestialBody.originalDistanceFromSun {
                         Text("Original Distance: \(formatNumber(celestialBody.originalDistanceFromSun)) AU")
                             .foregroundColor(.orange.opacity(0.9))
-                            .font(.system(size: 16))
+                            .font(.system(size: 13))
                         
                         Text("Original Orbital Period: \(formatNumber(celestialBody.originalOrbitalPeriod)) days")
                             .foregroundColor(.orange.opacity(0.9))
-                            .font(.system(size: 16))
+                            .font(.system(size: 13))
                     }
                 }
-                .padding()
+                .padding(10)
                 .background(accentColor.opacity(0.1))
-                .cornerRadius(12)
+                .cornerRadius(10)
             }
             
-            // Fun fact section with improved styling
+            // Fun fact section with smaller text
             if !celestialBody.funFact.isEmpty {
                 Divider()
                     .background(accentColor.opacity(0.3))
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Label("Fun Fact", systemImage: "star.fill")
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(accentColor)
                     
                     Text(celestialBody.funFact)
                         .foregroundColor(.white.opacity(0.9))
-                        .font(.system(size: 16))
+                        .font(.system(size: 13))
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 2)
                 }
-                .padding()
+                .padding(10)
                 .background(accentColor.opacity(0.1))
-                .cornerRadius(12)
+                .cornerRadius(10)
             }
         }
         .padding()
@@ -955,27 +1025,27 @@ struct InfoCell: View {
     private let accentColor = Color(red: 1.0, green: 0.85, blue: 0.4)
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundColor(accentColor.opacity(0.8))
             
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                 
                 if !unit.isEmpty {
                     Text(unit)
-                        .font(.system(size: 14))
+                        .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(8)
         .background(Color.white.opacity(0.05))
-        .cornerRadius(8)
+        .cornerRadius(6)
     }
 }
 

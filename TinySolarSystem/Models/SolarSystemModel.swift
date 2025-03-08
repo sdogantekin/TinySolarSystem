@@ -11,7 +11,7 @@ class SolarSystemModel: ObservableObject {
     
     // Zoom limits
     let minZoomLevel: Double = 0.1
-    let maxZoomLevel: Double = 30.0
+    let maxZoomLevel: Double = 100.0
     
     // Speed limits
     let minSpeedFactor: Double = 0.0
@@ -299,7 +299,7 @@ class SolarSystemModel: ObservableObject {
             moonCount: 2
         )
         
-        let jupiter = CelestialBody(
+        var jupiter = CelestialBody(
             name: "Jupiter",
             type: .planet,
             diameter: 142984,
@@ -311,13 +311,81 @@ class SolarSystemModel: ObservableObject {
             initialPhaseAngle: 1.6,
             color: Color(red: 0.85, green: 0.7, blue: 0.55), // Sandy beige with orange bands
             texture: "jupiter",
-            hasRings: true,
+            hasRings: false,
             ringColor: Color(red: 0.8, green: 0.7, blue: 0.5).opacity(0.7),
             funFact: "Jupiter's Great Red Spot is a storm that has been raging for at least 400 years and is larger than Earth.",
             moonCount: 79
         )
         
-        let saturn = CelestialBody(
+        // Add Jupiter's major moons
+        jupiter.moons.append(contentsOf: [
+            CelestialBody(
+                name: "Io",
+                type: .moon,
+                diameter: 3642,
+                mass: 8.93e22,
+                distanceFromSun: 5.2,
+                orbitalPeriod: 1.77, // Days
+                rotationPeriod: 1.77, // Tidally locked
+                eccentricity: 0.004,
+                initialPhaseAngle: 0.0,
+                color: Color(red: 0.9, green: 0.8, blue: 0.3), // Yellowish due to sulfur
+                texture: "io",
+                parentBodyID: jupiter.id,
+                distanceFromParent: 0.002,
+                funFact: "Io is the most volcanically active body in the Solar System, with hundreds of active volcanoes."
+            ),
+            CelestialBody(
+                name: "Europa",
+                type: .moon,
+                diameter: 3122,
+                mass: 4.8e22,
+                distanceFromSun: 5.2,
+                orbitalPeriod: 3.55, // Days
+                rotationPeriod: 3.55, // Tidally locked
+                eccentricity: 0.009,
+                initialPhaseAngle: 0.5,
+                color: Color(white: 0.9), // Icy white
+                texture: "europa",
+                parentBodyID: jupiter.id,
+                distanceFromParent: 0.004,
+                funFact: "Europa's surface is made of ice, and scientists believe it has a liquid water ocean beneath."
+            ),
+            CelestialBody(
+                name: "Ganymede",
+                type: .moon,
+                diameter: 5268,
+                mass: 1.48e23,
+                distanceFromSun: 5.2,
+                orbitalPeriod: 7.16, // Days
+                rotationPeriod: 7.16, // Tidally locked
+                eccentricity: 0.001,
+                initialPhaseAngle: 1.0,
+                color: Color(red: 0.6, green: 0.6, blue: 0.6), // Gray-brown
+                texture: "ganymede",
+                parentBodyID: jupiter.id,
+                distanceFromParent: 0.007,
+                funFact: "Ganymede is the largest moon in the Solar System, even bigger than the planet Mercury."
+            ),
+            CelestialBody(
+                name: "Callisto",
+                type: .moon,
+                diameter: 4821,
+                mass: 1.08e23,
+                distanceFromSun: 5.2,
+                orbitalPeriod: 16.69, // Days
+                rotationPeriod: 16.69, // Tidally locked
+                eccentricity: 0.007,
+                initialPhaseAngle: 1.5,
+                color: Color(red: 0.4, green: 0.4, blue: 0.4), // Dark gray
+                texture: "callisto",
+                parentBodyID: jupiter.id,
+                distanceFromParent: 0.012,
+                funFact: "Callisto is the most heavily cratered object in the Solar System."
+            )
+        ])
+        
+        var saturn = CelestialBody(
             name: "Saturn",
             type: .planet,
             diameter: 120536,
@@ -333,6 +401,26 @@ class SolarSystemModel: ObservableObject {
             ringColor: Color(red: 0.95, green: 0.9, blue: 0.7),
             funFact: "Saturn's rings are made mostly of ice particles and could fit between Earth and the Moon despite being only about 10 meters thick.",
             moonCount: 82
+        )
+        
+        // Add Saturn's largest moon, Titan
+        saturn.moons.append(
+            CelestialBody(
+                name: "Titan",
+                type: .moon,
+                diameter: 5150,
+                mass: 1.35e23,
+                distanceFromSun: 9.5,
+                orbitalPeriod: 15.95, // Days
+                rotationPeriod: 15.95, // Tidally locked
+                eccentricity: 0.0288,
+                initialPhaseAngle: 0.0,
+                color: Color(red: 0.8, green: 0.6, blue: 0.2), // Orange-yellow due to atmosphere
+                texture: "titan",
+                parentBodyID: saturn.id,
+                distanceFromParent: 0.008,
+                funFact: "Titan is the only moon known to have a dense atmosphere and liquid on its surface (though it's liquid methane, not water)."
+            )
         )
         
         let uranus = CelestialBody(
@@ -365,7 +453,7 @@ class SolarSystemModel: ObservableObject {
             initialPhaseAngle: 2.8,
             color: Color(red: 0.1, green: 0.3, blue: 0.9), // Deep blue
             texture: "neptune",
-            hasRings: true,
+            hasRings: false,
             ringColor: Color(red: 0.2, green: 0.4, blue: 0.9).opacity(0.5),
             funFact: "Neptune has the strongest winds in the solar system, reaching speeds of 2,100 km/h (1,300 mph).",
             moonCount: 14
